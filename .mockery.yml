@@ -1,0 +1,12 @@
+all: true
+dir: mocks
+filename: '{{.InterfaceName}}.go'
+structname: '{{.InterfaceName}}'
+pkgname: cmd_mocks
+template: testify
+force-file-write: true
+formatter: goimports
+packages:
+  github.com/grongor/go-cmd: {}
+template-data:
+  unroll-variadic: true
