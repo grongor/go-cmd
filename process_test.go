@@ -1,3 +1,5 @@
+//go:build unix
+
 package cmd_test
 
 import (
@@ -42,11 +44,38 @@ func TestProcess_SignalAndWait(t *testing.T) {
 	process := command.GetProcess()
 	assert.NotNil(process)
 
+	assert.Equal(command.(*cmd.OsExecCommand).Cmd().Process.Pid, process.Pid())
+
 	assert.NoError(process.Signal(os.Interrupt))
 
 	state, err := process.Wait()
 	assert.NoError(err)
 	assert.False(state.Success())
+	assert.Equal(process.Pid(), state.Pid())
+	assert.Equal("signal: interrupt", state.String())
+}
+
+func TestProcess_WithHandle(t *testing.T) {
+	assert := require.New(t)
+
+	command := cmd.NewOsExecFactory().Command("sleep", "5")
+
+	assert.NoError(command.Start())
+
+	process := command.GetProcess()
+
+	called := false
+
+	err := process.WithHandle(func(uintptr) { called = true })
+	if errors.Is(err, os.ErrNoHandle) {
+		assert.False(called) // the platform (or kernel) doesn't provide process handles
+	} else {
+		assert.NoError(err)
+		assert.True(called)
+	}
+
+	assert.NoError(process.Kill())
+	assert.EqualError(command.Wait(), "signal: killed")
 }
 
 func TestProcess_KillAndRelease(t *testing.T) {
@@ -60,7 +89,7 @@ func TestProcess_KillAndRelease(t *testing.T) {
 
 	process := command.GetProcess()
 	assert.NotNil(process)
-	assert.Same(process, command.GetProcess())
+	assert.Equal(process, command.GetProcess())
 
 	assert.NoError(process.Kill())
 	assert.NoError(process.Release())
@@ -82,6 +111,7 @@ func TestProcessState(t *testing.T) {
 	assert.True(processState.Exited())
 	assert.Greater(processState.Pid(), 1)
 	assert.True(processState.Success())
+	assert.Equal("exit status 0", processState.String())
 	assert.Equal(syscall.WaitStatus(0), processState.Sys())
 	assert.GreaterOrEqual(processState.SystemTime(), time.Duration(0))
 	assert.IsType(&syscall.Rusage{}, processState.SysUsage())

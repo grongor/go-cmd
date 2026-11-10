@@ -1,8 +1,11 @@
+//go:build unix
+
 package cmd_test
 
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -45,12 +48,14 @@ func TestOsExecFactory_LookupPath(t *testing.T) {
 
 	factory := cmd.NewOsExecFactory()
 
-	wd, err := os.Getwd()
-	assert.NoError(err)
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "go-cmd-test-executable")
 
-	os.Setenv("PATH", wd+string(os.PathSeparator)+"bin"+string(os.PathListSeparator)+os.Getenv("PATH"))
+	assert.NoError(os.WriteFile(executable, []byte("#!/bin/sh\n"), 0o700)) //nolint:gosec // must be executable
 
-	path, err := factory.LookPath("mockery")
-	assert.Equal(wd+"/bin/mockery", path)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	path, err := factory.LookPath("go-cmd-test-executable")
 	assert.NoError(err)
+	assert.Equal(executable, path)
 }

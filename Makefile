@@ -1,16 +1,21 @@
-export BIN = ${PWD}/bin
-export GOBIN = $(BIN)
+BIN = $(CURDIR)/bin
+
+GOLANGCI_LINT_VERSION = v2.15.0
+MOCKERY_VERSION = v3.9.1
+
+GOLANGCI_LINT = $(BIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+MOCKERY = $(BIN)/mockery-$(MOCKERY_VERSION)
 
 .PHONY: check
 check: lint test
 
 .PHONY: lint
-lint: $(BIN)/golangci-lint mocks
-	$(BIN)/golangci-lint run
+lint: $(GOLANGCI_LINT) mocks
+	$(GOLANGCI_LINT) run
 
 .PHONY: fix
-fix: $(BIN)/golangci-lint mocks
-	$(BIN)/golangci-lint run --fix
+fix: $(GOLANGCI_LINT) mocks
+	$(GOLANGCI_LINT) run --fix
 
 .PHONY: test
 test: mocks
@@ -18,29 +23,22 @@ test: mocks
 	go test --timeout 5m $(GO_TEST_FLAGS) --race ./...
 	go test --timeout 5m $(GO_TEST_FLAGS) --count 100 ./...
 
-mocks: $(BIN)/mockery $(shell find . -type f -name '*.go' -not -name '*_test.go')
-	$(BIN)/mockery --all --outpkg cmd_mocks
+mocks: $(MOCKERY) .mockery.yml $(shell find . -type f -name '*.go' -not -name '*_test.go' -not -path './mocks/*')
+	$(MOCKERY)
 	@touch mocks
 
 .PHONY: coverage
-coverage: $(BIN)/go-acc mocks
-	$(BIN)/go-acc --covermode set --output coverage.cov ./...
+coverage: mocks
+	go test --timeout 5m --covermode atomic --coverpkg . --coverprofile coverage.cov ./...
 
 .PHONY: clean
 clean:
-	rm -rf bin mocks coverage.cov
+	rm -rf bin coverage.cov
 
-$(BIN)/golangci-lint:
-	curl --retry 5 -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh
+$(GOLANGCI_LINT):
+	GOBIN=$(BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	mv $(BIN)/golangci-lint $@
 
-$(BIN)/mockery:
-	mkdir -p $(BIN)
-	curl -sSfL https://api.github.com/repos/vektra/mockery/releases | jq -r 'first(.[] | select(.tag_name | test("^v2\\.8[.0-9]+$$"))) | .assets[] | select(.name | test("Linux_x86_64.tar.gz")) | .browser_download_url' \
-		| xargs curl -sSfL \
-		| tar -xz -C $(BIN) mockery
-	#curl -sSfL https://api.github.com/repos/vektra/mockery/releases | jq -r 'first(.[] | select(.tag_name | test("^v2[.0-9]+$$"))) | .assets[] | select(.name | test("Linux_x86_64.tar.gz")) | .browser_download_url' \
-#		| xargs curl -sSfL \
-#		| tar -xz -C $(BIN) mockery
-
-$(BIN)/go-acc:
-	go install github.com/ory/go-acc@latest
+$(MOCKERY):
+	GOBIN=$(BIN) go install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
+	mv $(BIN)/mockery $@

@@ -2,39 +2,67 @@ name: CI
 
 on:
     push:
+        branches: [ master ]
     pull_request:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
     test:
-        name: Test
-        runs-on: ubuntu-latest
+        name: Test (${{ matrix.os }}, Go ${{ matrix.go-version || 'from go.mod' }})
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ ubuntu-latest, macos-latest ]
+                # The minimum version from go.mod and the latest stable release.
+                go-version: [ '', stable ]
         steps:
-            -   uses: actions/checkout@v2
-            -   uses: actions/setup-go@v2
+            -   uses: actions/checkout@v7
+            -   uses: actions/setup-go@v7
                 with:
-                    go-version: '^1.17'
+                    go-version: ${{ matrix.go-version }}
+                    go-version-file: ${{ matrix.go-version == '' && 'go.mod' || '' }}
             -   name: Run tests
                 run: make test
+            -   name: Check generated mocks are up to date
+                run: test -z "$(git status --porcelain -- mocks)" || { git status --porcelain -- mocks; exit 1; }
+
+    lint:
+        name: Lint
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@v7
+            -   uses: actions/setup-go@v7
+                with:
+                    go-version-file: go.mod
+            -   name: Check go.mod and go.sum are tidy
+                run: go mod tidy -diff
+            -   name: golangci-lint
+                run: make lint
+            -   name: Check the library builds on other platforms
+                run: |
+                    for os in windows freebsd; do
+                        echo "GOOS=$os"
+                        CGO_ENABLED=0 GOOS=$os go vet ./...
+                    done
 
     coverage:
         name: Code Coverage
         runs-on: ubuntu-latest
         steps:
-            -   uses: actions/checkout@v2
-            -   uses: actions/setup-go@v2
+            -   uses: actions/checkout@v7
+            -   uses: actions/setup-go@v7
                 with:
-                    go-version: '^1.17'
+                    go-version: stable
             -   name: Generate Code Coverage
                 run: make coverage
             -   name: Send coverage
                 uses: shogo82148/actions-goveralls@v1
                 with:
                     path-to-profile: coverage.cov
-
-    lint:
-        name: Lint
-        runs-on: ubuntu-latest
-        steps:
-            -   uses: actions/checkout@v2
-            -   name: golangci-lint
-                uses: golangci/golangci-lint-action@v2

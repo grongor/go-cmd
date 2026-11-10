@@ -5,19 +5,29 @@ on:
         tags:
             - v*
 
+permissions:
+    contents: read
+
 jobs:
     release:
         name: Release
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
         steps:
             -   name: Checkout
-                uses: actions/checkout@v2
+                uses: actions/checkout@v7
                 with:
                     fetch-depth: 0
-            -   uses: actions/setup-go@v2
-            -   name: GoReleaser
-                uses: goreleaser/goreleaser-action@v2
+            -   uses: actions/setup-go@v7
                 with:
-                    args: release
+                    go-version: stable
+            -   name: Run tests
+                run: make test
+            -   name: GoReleaser
+                uses: goreleaser/goreleaser-action@v7
+                with:
+                    version: '~> v2'
+                    args: release --clean
                 env:
                     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
